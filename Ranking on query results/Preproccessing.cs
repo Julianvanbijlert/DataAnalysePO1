@@ -52,10 +52,10 @@ public class Preprocessing
     public float Sim(string t, string q)
     {
         float sum = 0;
-        float m = q.Length;
+        int m = q.Length;
 
         //sum to m: (S(t,q),
-        for (float i = 0; i < m; i++)
+        for (int i = 0; i < m; i++)
         {
             sum += S(t[i], q[i]);
         }
@@ -111,8 +111,8 @@ public class Preprocessing
     public List<float> Intersect(float[] t, float[] q)
     {
         List<float> result = new List<float>();
-        float i1 = 0;
-        float i2 = 0;
+        int i1 = 0;
+        int i2 = 0;
 
         while (i1 < t.Length && i2 < q.Length)
         {
@@ -146,7 +146,7 @@ public class Preprocessing
 
 
         //en voeg de van q toe als ze er nog niet in zitten
-        for (float i = 0; i < q.Length; i++)
+        for (int i = 0; i < q.Length; i++)
         {
             if (!set.Contains(q[i]))
             {
@@ -167,9 +167,9 @@ public class Preprocessing
     //length set intersection
     public float FastIntersect(float[] t, float[] q)
     {
-        float result = 0;
-        float i1 = 0;
-        float i2 = 0;
+        int result = 0;
+        int i1 = 0;
+        int i2 = 0;
 
         while (i1 < t.Length && i2 < q.Length)
         {
@@ -205,7 +205,7 @@ public class Preprocessing
 
 
         //en voeg de van q toe als ze er nog niet in zitten
-        for (float i = 0; i < q.Length; i++)
+        for (int i = 0; i < q.Length; i++)
         {
             if (!set.Contains(q[i]))
             {
