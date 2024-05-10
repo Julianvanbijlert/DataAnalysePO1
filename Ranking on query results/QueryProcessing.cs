@@ -18,3 +18,16 @@ using System.Collections.Generic;
    we definiëren idfk v) = log(N/Fk(v))
  *
  */
+
+ namespace project;
+
+public static class Program
+{
+    public static void Main()
+    {
+        Preprocessing p = new Preprocessing();
+        p.Processing();
+
+
+    }
+}
