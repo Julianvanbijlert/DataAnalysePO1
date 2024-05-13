@@ -40,9 +40,9 @@ public class Preprocessing
 
 
     public Dictionary<string, float> RQF = new Dictionary<string, float>();
-    public Dictionary<string, List<float>> Database = new Dictionary<string, List<float>>();
+    public Dictionary<(string, string), List<float>> Database = new Dictionary<(string, string), List<float>>();
     public Dictionary<string, List<string>> tablesforDictionary = new Dictionary<string, List<string>>();
-    public string[] queries = new string[] { "mpg", "cylinders", "displacement", "horsepower", "weight", "acceleration", "model_year", "origin", "brand", "model", "type" };
+    public string[] queries = new string[] {"id", "mpg", "cylinders", "displacement", "horsepower", "weight", "acceleration", "model_year", "origin", "brand", "model", "type" };
 
 
     public Dictionary<string, string[]> types = new Dictionary<string, string[]>();
@@ -86,25 +86,8 @@ public class Preprocessing
                     model text,
                     type text,
                     */
-
-                    //niet boeinnd dit was gewoon ff om te kijken
-                    int id = reader.GetInt32(0);
-                    float mpg = reader.GetFloat(1);
-                    int cylinders = reader.GetInt32(2);
-                    float displacement = reader.GetFloat(3);
-                    float horsepower = reader.GetFloat(4);
-                    float weight = reader.GetFloat(5);
-                    float acceleration = reader.GetFloat(6);
-                    int model_year = reader.GetInt32(7);
-                    int origin = reader.GetInt32(8);
-                    string brand = reader.GetString(9);
-                    string model = reader.GetString(10);
-                    string type = reader.GetString(11);
-
-                   
-                    string text = $"{mpg} {cylinders} {displacement} {horsepower} {weight} {acceleration} {model_year} {origin} {brand} {model} {type}";
                     
-                    List<(string, string, int)> keyValues = Map(id, text);
+                    List<((string, string), int)> keyValues = Map(reader);
                     Reduce(keyValues);
 
                     
@@ -112,9 +95,17 @@ public class Preprocessing
             }
         }
 
+        Console.WriteLine("Metadb Database will now be emptied");
+
+        PrintDatabase(metadb);
         DropDatabase(metadb);
+
+
         //fill metadb
-        DictionaryToDatabase(Database, tablesforDictionary, metadb);
+        Console.WriteLine("Filling metadb");
+        DictionaryToDatabase(Database, metadb);
+        PrintDatabase(metadb);
+
         Console.ReadLine();
     }
 
@@ -123,6 +114,7 @@ public class Preprocessing
         PrintDatabase(database);
         Console.WriteLine("Dropping Database");
         DropDatabase(databasePath);
+
 
         Console.WriteLine("Filling Database");
         PrintDatabase(database);
@@ -266,15 +258,16 @@ public class Preprocessing
     }
 
 
-    public void DictionaryToDatabase(Dictionary<string, List<float>> chosenDictionary, Dictionary<string, List<string>> tableDictionary, string databasePath)
+    public void DictionaryToDatabase(Dictionary<(string, string), List<float>> chosenDictionary, string databasePath)
     {
-       
+       HashSet<string> tables = new HashSet<string>();
         using (var connection = new SqliteConnection(databasePath))
         {
             connection.Open();
 
             using (var command = connection.CreateCommand())
             {
+                /*
                 foreach (KeyValuePair<string, List<string>> entry in tableDictionary)
                 {
                     string key = entry.Key;
@@ -283,14 +276,30 @@ public class Preprocessing
                     command.CommandText = $"CREATE TABLE {key} (id integer NOT NULL, {key} text, PRIMARY KEY (id));";
                     command.ExecuteNonQuery();
                 }
+                */
 
-
-                foreach (KeyValuePair<string, List<float>> entry in chosenDictionary)
+                foreach (KeyValuePair<(string, string), List<float>> entry in chosenDictionary)
                 {
-                    string key = entry.Key;
-                    List<float> value = entry.Value;
+                    
+                    string attribuut = entry.Key.Item1;
+                    string invulling = NoPoint(entry.Key.Item2);
+                    string posting = ListToString(entry.Value);
+                    string typeInvulling = ReturnType(attribuut);
 
-                    command.CommandText = $"INSERT INTO {key} VALUES ({value})";
+                    //create a table for each different type
+                    if (!tables.Contains(attribuut))
+                    {
+                        command.CommandText = $"CREATE TABLE {attribuut} " +
+                                              $"({attribuut} {typeInvulling}, " +
+                                              $"Posting text, " +
+                                              $"PRIMARY KEY({attribuut})" + 
+                                              $");";
+
+                        command.ExecuteNonQuery();
+                        tables.Add(attribuut);
+                    }
+
+                    command.CommandText = $"INSERT INTO {attribuut} ({attribuut}, Posting) VALUES ('{invulling}', '{posting}')";
                     command.ExecuteNonQuery();
                 }
             }
@@ -298,7 +307,59 @@ public class Preprocessing
     }
 
 
+    public static string NoPoint(string attribuut)
+    {
+        string noPoint = attribuut.Replace(".", ",");
+        return noPoint;
+    }
 
+    public static string ReturnType(string attribuut)
+    {
+        string typeInvulling;
+        switch (attribuut)
+        {
+            //all integers
+            case "id":
+            case "cylinders":
+            case "model_year":
+            case "origin": typeInvulling = "integer"; break;
+
+            //all reals
+            case "displacement":
+            case "horsepower":
+            case "weight":
+            case "acceleration":
+            case "mpg": typeInvulling = "real"; break;
+
+            default: typeInvulling = "text"; break;
+        }
+
+        return typeInvulling;
+    }
+
+    static object ToValue(string value, string type)
+    {
+        switch (type)
+        {
+            case "integer": return int.Parse(value);
+            case "real": return float.Parse(value);
+            default: return value;
+        }
+    }
+
+    static string ListToString(List<float> list)
+    {
+        string result = "";
+        foreach (float id in list)
+        {
+            result += id + " ";
+        }
+
+        return result;
+    }
+
+
+    
 
 
 
@@ -354,9 +415,11 @@ public class Preprocessing
     //subset van de queries in de workload waarin waarde v voorkomt in een in clause voor een specifiek attribuut
     public List<float> W(string attribute)
     {
+        //TODO: implementatie van W, database query
         //Dit is gewoon de postinglist van t
+        throw(new NotImplementedException());
 
-        return Database[attribute];
+        return Database[("*", attribute)];
     }
 
 
@@ -480,43 +543,50 @@ public class Preprocessing
         return result;
     }
 
-    public List<(string, string, int)> Map(int id, string text)
+    public List<((string, string), int)> Map(SqliteDataReader reader)
     {
+        List<((string, string), int)> keyValues = new List<((string, string), int)>();
+        int id = reader.GetInt32(0);
 
-        List<(string, string, int)> keyValues = new List<(string, string, int)>();
-        int i = 0;
-        foreach (string word in text.Split(" "))
+        //de get strings van de reader zijn de invullingen van de attributen van een auto. bv type = cilinder, en de invulling = 4
+        for (int i = 1; i < queries.Length; i++)
         {
-            string s = queries[i];
-            keyValues.Add((word, s, id));
+            //queries zijn de types die we hebben (oftewel de attributen van een auto)
+            keyValues.Add(((queries[i], reader.GetString(i)), id));
         }
+        /*
+           //niet boeinnd dit was gewoon ff om te kijken
+           float mpg = reader.GetFloat(1);
+           int cylinders = reader.GetInt32(2);
+           float displacement = reader.GetFloat(3);
+           float horsepower = reader.GetFloat(4);
+           float weight = reader.GetFloat(5);
+           float acceleration = reader.GetFloat(6);
+           int model_year = reader.GetInt32(7);
+           int origin = reader.GetInt32(8);
+           string brand = reader.GetString(9);
+           string model = reader.GetString(10);
+           string type = reader.GetString(11);
+           string text = $"{mpg} {cylinders} {displacement} {horsepower} {weight} {acceleration} {model_year} {origin} {brand} {model} {type}";
+           */
+       
 
         return keyValues;
     }
 
 
-    public void Reduce(List<(string, string, int)> keyValues)
+    public void Reduce(List<((string, string), int)> keyValues)
     {
-        foreach ((string, string, int) keyValue in keyValues)
+        foreach (((string, string), int) keyValue in keyValues)
         {
             //add to pointerlist
             if (Database.ContainsKey(keyValue.Item1))
             {
-                Database[keyValue.Item1].Add(keyValue.Item3);
+                Database[keyValue.Item1].Add(keyValue.Item2);
             }
             else
             {
-                Database[keyValue.Item1] = new List<float>(){ keyValue.Item3 };
-            }
-
-            //add tables
-            if (tablesforDictionary.ContainsKey(keyValue.Item1))
-            {
-                tablesforDictionary[keyValue.Item2].Add(keyValue.Item1);
-            }
-            else
-            {
-                tablesforDictionary[keyValue.Item2] = new List<string>() { keyValue.Item1 };
+                Database[keyValue.Item1] = new List<float>(){ keyValue.Item2 };
             }
         }
     }
