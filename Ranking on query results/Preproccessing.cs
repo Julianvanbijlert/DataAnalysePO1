@@ -72,6 +72,8 @@ public class Preprocessing
     public Dictionary<string, float> RQF = new Dictionary<string, float>();
     public Dictionary<(string, string), MetaData> Database = new Dictionary<(string, string), MetaData>();
     public Dictionary<string, List<string>> tablesforDictionary = new Dictionary<string, List<string>>();
+
+
     public string[] queries = new string[] {"id", "mpg", "cylinders", "displacement", "horsepower", "weight", "acceleration", "model_year", "origin", "brand", "model", "type" };
 
 
@@ -83,14 +85,22 @@ public class Preprocessing
     public readonly string metadb = "Data Source=metadb.db";
     public readonly string filepathMetadb = "../../../metadb.db";
     public readonly string filepathQueries = "../../../queries.txt";
-    public int N_totaldocuments;
-    public int N_totalqueries;
-    public int uniqueQueries;
+
+    private readonly bool RedoDB = false;
+    private readonly bool RedoMDB = false;
+    public int N_totaldocuments = 0;
+    public int N_totalqueries = 0;
+    public int uniqueQueries = 0;
+
+    
 
     public void Processing()
     {
-        
-        ReFillDatabase(database);
+        if (RedoDB)
+        {
+            ReFillDatabase(database);
+
+        }
 
         using (var conn = new SqliteConnection(database))
         {
@@ -132,6 +142,9 @@ public class Preprocessing
             CalculateIDF();
         }
 
+        if (RedoMDB)
+        {
+
         Console.WriteLine("Metadb Database will now be emptied");
 
         PrintDatabase(metadb);
@@ -141,8 +154,9 @@ public class Preprocessing
         //fill metadb
         Console.WriteLine("Filling metadb");
         DictionaryToDatabase(Database, metadb);
-        PrintDatabase(metadb);
+        }
 
+        PrintDatabase(metadb);
         Console.ReadLine();
     }
 
@@ -431,6 +445,8 @@ public class Preprocessing
         }
     }
 
+
+   
     static string ListToString(List<float> list)
     {
         string result = "";
@@ -493,6 +509,14 @@ public class Preprocessing
             {
                 Database[keyValue.Item1] = new MetaData(keyValue.Item2);
             }
+
+            //add to table
+            if (!tablesforDictionary.ContainsKey(keyValue.Item1.Item2))
+            {
+                //Dit zijn de tablename die verbonden wordt met de een van de postinlist. Zodat je de table kan opzoeken. 
+                tablesforDictionary[keyValue.Item1.Item2] = new List<string>() { keyValue.Item1.Item1 };
+            }
+            else tablesforDictionary[ keyValue.Item1.Item2].Add(keyValue.Item1.Item1);
         }
     }
 
