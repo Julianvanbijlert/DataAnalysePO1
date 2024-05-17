@@ -4,7 +4,10 @@ using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Reflection.Metadata;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Data.Sqlite;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 //The first program will do some preprocessing on the data and/or the workload.
 //During this phase, a meta database will be constructed and filled.
@@ -12,6 +15,33 @@ using Microsoft.Data.Sqlite;
 
  namespace project;
 
+/// <summary>
+/// Data for the METADB. Has a PostingList (float) and IDF (int)
+/// </summary>
+public class MetaData
+{
+    public List<float> PostingList;
+    /// <summary>
+    /// number of documents in our collection that contain t
+    /// </summary>
+    public int DocumentFrequency;
+
+    /// <summary>
+    /// idf is a measure for the rareness of a term
+    /// </summary>
+    public double IDF;
+    public MetaData()
+    {
+        PostingList = new List<float>();
+    }
+
+    public MetaData(int i)
+    {
+        PostingList = new List<float>();
+        PostingList.Add(i);
+        DocumentFrequency = 1;
+    }
+}
 public class Preprocessing
 {
     /*
@@ -40,17 +70,22 @@ public class Preprocessing
 
 
     public Dictionary<string, float> RQF = new Dictionary<string, float>();
-    public Dictionary<(string, string), List<float>> Database = new Dictionary<(string, string), List<float>>();
+    public Dictionary<(string, string), MetaData> Database = new Dictionary<(string, string), MetaData>();
     public Dictionary<string, List<string>> tablesforDictionary = new Dictionary<string, List<string>>();
     public string[] queries = new string[] {"id", "mpg", "cylinders", "displacement", "horsepower", "weight", "acceleration", "model_year", "origin", "brand", "model", "type" };
 
 
     public Dictionary<string, string[]> types = new Dictionary<string, string[]>();
     //"C:/Users/julia/OneDrive/Bureaublad/UniUtrecht/Leerjaar 2 2023-2024/P4 Data Analyse en Retrieval/Opdrachten/Ranking on query results/Dataset.db";
-    private readonly string database = "Data Source=Dataset.db";
-    private readonly string table = "autompg";
-    private readonly string filepathDBfill = "../../../autompg.sql";
-    private readonly string metadb = "Data Source=metadb.db";
+    public readonly string database = "Data Source=Dataset.db";
+    public readonly string table = "autompg";
+    public readonly string filepathDBfill = "../../../autompg.sql";
+    public readonly string metadb = "Data Source=metadb.db";
+    public readonly string filepathMetadb = "../../../metadb.db";
+    public readonly string filepathQueries = "../../../queries.txt";
+    public int N_totaldocuments;
+    public int N_totalqueries;
+    public int uniqueQueries;
 
     public void Processing()
     {
@@ -67,7 +102,7 @@ public class Preprocessing
 
             command.CommandText = $"SELECT * FROM {table}";
 
-            //now we process all the data
+            //nu processen we de data
             using (var reader = command.ExecuteReader())
             {
                 while (reader.Read())
@@ -93,6 +128,8 @@ public class Preprocessing
                     
                 }
             }
+
+            CalculateIDF();
         }
 
         Console.WriteLine("Metadb Database will now be emptied");
@@ -127,16 +164,16 @@ public class Preprocessing
     {
         using (var connection = new SqliteConnection(databasePath))
         {
-            // Open the connection
+            // Open connection
             connection.Open();
 
-            // Read SQL script file
-            string script = File.ReadAllText(filepathDBfill);
+            // Get the queries and data
+            //string[] queries = ProcesQueries(GetQueries());
+            string[] data = GetDataset();
+            string[] commands = data;//queries.Concat(data).ToArray();
 
-            // Split script into individual commands
-            string[] commands = script.Split(';');
 
-            // Execute each command
+            // Execute commands
             foreach (var commandText in commands)
             {
                 if (!string.IsNullOrWhiteSpace(commandText))
@@ -153,6 +190,51 @@ public class Preprocessing
 
         Console.WriteLine($"Database '{database}' filled successfully.");
 
+    }
+
+
+    public string LookUpTable(string attribute)
+    {
+        throw (new NotImplementedException());
+    }
+    public string[] GetQueries()
+    {
+        string script = File.ReadAllText(filepathQueries);
+
+        // Split script into individual commands
+        return script.Split('\n');
+    }
+
+    public string[] ProcesQueries(string[] queries)
+    {
+        string[] result = new string[queries.Length - 2];
+
+
+        N_totalqueries = int.Parse(queries[0].Split(" ")[0]);
+
+        //optional denk ik
+        uniqueQueries = int.Parse(queries[1].Split(" ")[0]);
+
+        for (int i = 2; i < queries.Length; i++)
+        {
+            result[i] = ProcesQuery(queries[i]);
+        }
+
+        return result;
+    }
+
+    public string ProcesQuery(string query)
+    {
+        throw (new NotImplementedException());
+    }
+
+    public string[] GetDataset()
+    {
+        // Read SQL script file
+        string script = File.ReadAllText(filepathDBfill);
+
+        // Split script into individual commands
+        return script.Split(';');
     }
 
     public void DropDatabase(string databasePath)
@@ -258,7 +340,7 @@ public class Preprocessing
     }
 
 
-    public void DictionaryToDatabase(Dictionary<(string, string), List<float>> chosenDictionary, string databasePath)
+    public void DictionaryToDatabase(Dictionary<(string, string), MetaData> chosenDictionary, string databasePath)
     {
        HashSet<string> tables = new HashSet<string>();
         using (var connection = new SqliteConnection(databasePath))
@@ -278,12 +360,13 @@ public class Preprocessing
                 }
                 */
 
-                foreach (KeyValuePair<(string, string), List<float>> entry in chosenDictionary)
+                foreach (KeyValuePair<(string, string), MetaData> entry in chosenDictionary)
                 {
                     
                     string attribuut = entry.Key.Item1;
-                    string invulling = NoPoint(entry.Key.Item2);
-                    string posting = ListToString(entry.Value);
+                    string invulling = entry.Key.Item2; //NoPoint(entry.Key.Item2);
+                    string posting = ListToString(entry.Value.PostingList);
+                    double IDF = entry.Value.IDF;
                     string typeInvulling = ReturnType(attribuut);
 
                     //create a table for each different type
@@ -292,6 +375,7 @@ public class Preprocessing
                         command.CommandText = $"CREATE TABLE {attribuut} " +
                                               $"({attribuut} {typeInvulling}, " +
                                               $"Posting text, " +
+                                              $"IDF real, " +
                                               $"PRIMARY KEY({attribuut})" + 
                                               $");";
 
@@ -299,7 +383,7 @@ public class Preprocessing
                         tables.Add(attribuut);
                     }
 
-                    command.CommandText = $"INSERT INTO {attribuut} ({attribuut}, Posting) VALUES ('{invulling}', '{posting}')";
+                    command.CommandText = $"INSERT INTO {attribuut} ({attribuut}, Posting, IDF) VALUES ('{invulling}', '{posting}', '{IDF}')";
                     command.ExecuteNonQuery();
                 }
             }
@@ -359,192 +443,11 @@ public class Preprocessing
     }
 
 
-    
-
-
-
-
-
-    public float RGQFmax()
-    {
-        throw(new NotImplementedException());
-    }
-
-    //TODO fill RQF functie
-
-    //t is een lijst van termen, q is een lijst van query termen
-    public float Sim(string[] t, string[] q)
-    {
-        float sum = 0;
-        int m = q.Length;
-
-        //sum to m: (S(t,q),
-        for (int i = 0; i < m; i++)
-        {
-            sum += S(t[i], q[i]);
-        }
-
-        return sum;
-    }
-
-    public float QFSimularity(string u, string v)
-    {
-        if(u != v)
-            return 0;
-
-        return QF(u);
-    }
-
-
-    public float QF(string q)
-    {
-        throw(new NotImplementedException("RQF NOT FILLED YET"));
-        //RQF(V) / RGQFmax
-        return (float)RQF[q] / RGQFmax();
-
-    }
-
-
-    //S(ti,qj) = J(W(t),W(q) * QF(q)), 
-    // similarity tussen een query term q en een term t 
-    public float S(string t, string q)
-    {
-        return J(W(t), W(q)) * QFSimularity(q, t);
-    }
-
-    //subset van de queries in de workload waarin waarde v voorkomt in een in clause voor een specifiek attribuut
-    public List<float> W(string attribute)
-    {
-        //TODO: implementatie van W, database query
-        //Dit is gewoon de postinglist van t
-        throw(new NotImplementedException());
-
-        return Database[("*", attribute)];
-    }
-
-
-    //| W(t)| and |W(q)| /  | W(t)| or |W(q)|
-    //Jaquard coefficient meet de similarity tussen 2 sets
-    public float SlowJ(List<float> t, List<float> q)
-    {
-        List<float> intersection = Intersect(t, q);
-        List<float> union = Union(t, q);
-
-        return intersection.Count / union.Count;
-    }
-
-    //set intersection
-    public List<float> Intersect(List<float> t, List<float> q)
-    {
-        List<float> result = new List<float>();
-        int i1 = 0;
-        int i2 = 0;
-
-        while (i1 < t.Count && i2 < q.Count)
-        {
-
-            if (t[i1] == q[i2])
-            {
-                result.Add(t[i1]);
-                i1++;
-                i2++;
-            }
-            else if (t[i1] < q[i2])
-            {
-                i1++;
-            }
-            else
-            {
-                i2++;
-            }
-
-        }
-
-        return result;
-    }
-    //set union
-    public List<float> Union(List<float> t, List<float> q)
-    {
-        //stop alle van t in de set 
-        List<float> result = new List<float>(t);
-
-        HashSet<float> set = new HashSet<float>(t);
-
-
-        //en voeg de van q toe als ze er nog niet in zitten
-        for (int i = 0; i < q.Count; i++)
-        {
-            if (!set.Contains(q[i]))
-            {
-                result.Add(q[i]);
-                set.Add(q[i]);
-            }
-        }
-
-        return result;
-    }
-
-
-    //length set intersection / length set union
-    public float J(List<float> t, List<float> q)
-    {
-        return FastIntersect(t, q) / FastUnion(t, q);
-    }
-    //length set intersection
-    public float FastIntersect(List<float> t, List<float> q)
-    {
-        int result = 0;
-        int i1 = 0;
-        int i2 = 0;
-
-        while (i1 < t.Count && i2 < q.Count)
-        {
-
-            if (t[i1] == q[i2])
-            {
-                //update length
-               result++;
-
-                //update index
-                i1++;
-                i2++;
-            }
-            else if (t[i1] < q[i2])
-            {
-                i1++;
-            }
-            else
-            {
-                i2++;
-            }
-
-        }
-
-        return result;
-    }
-    //length set union
-    public float FastUnion(List<float> t, List<float> q)
-    {
-        //stop alle van t in de set 
-        float result = t.Count;
-        HashSet<float> set = new HashSet<float>(t);
-
-
-        //en voeg de van q toe als ze er nog niet in zitten
-        for (int i = 0; i < q.Count; i++)
-        {
-            if (!set.Contains(q[i]))
-            {
-                result++;
-                set.Add(q[i]);
-            }
-        }
-
-        return result;
-    }
+   
 
     public List<((string, string), int)> Map(SqliteDataReader reader)
     {
+        N_totaldocuments++;
         List<((string, string), int)> keyValues = new List<((string, string), int)>();
         int id = reader.GetInt32(0);
 
@@ -579,15 +482,25 @@ public class Preprocessing
     {
         foreach (((string, string), int) keyValue in keyValues)
         {
-            //add to pointerlist
+            //add to postinglist
             if (Database.ContainsKey(keyValue.Item1))
             {
-                Database[keyValue.Item1].Add(keyValue.Item2);
+                Database[keyValue.Item1].PostingList.Add(keyValue.Item2);
+                Database[keyValue.Item1].DocumentFrequency++;
+
             }
             else
             {
-                Database[keyValue.Item1] = new List<float>(){ keyValue.Item2 };
+                Database[keyValue.Item1] = new MetaData(keyValue.Item2);
             }
+        }
+    }
+
+    public void CalculateIDF()
+    {
+        foreach (KeyValuePair<(string,string), MetaData> data in Database)
+        {
+            data.Value.IDF = Math.Log(N_totaldocuments / data.Value.DocumentFrequency);
         }
     }
 
