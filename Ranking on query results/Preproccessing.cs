@@ -8,6 +8,7 @@ using System.Reflection.Metadata;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Data.Sqlite;
 using static System.Runtime.InteropServices.JavaScript.JSType;
+using Boolean = System.Boolean;
 
 //The first program will do some preprocessing on the data and/or the workload.
 //During this phase, a meta database will be constructed and filled.
@@ -30,16 +31,20 @@ public class MetaData
     /// idf is a measure for the rareness of a term
     /// </summary>
     public double IDF;
+
+    public int RQF;
     public MetaData()
     {
         PostingList = new List<float>();
+        DocumentFrequency = 0;
+        RQF = 0;
     }
 
     public MetaData(int i)
     {
-        PostingList = new List<float>();
-        PostingList.Add(i);
+        PostingList = new List<float>(){i};
         DocumentFrequency = 1;
+        RQF = 0;
     }
 }
 public class Preprocessing
@@ -72,6 +77,7 @@ public class Preprocessing
     public Dictionary<string, float> RQF = new Dictionary<string, float>();
     public Dictionary<(string, string), MetaData> Database = new Dictionary<(string, string), MetaData>();
     public Dictionary<string, List<string>> tablesforDictionary = new Dictionary<string, List<string>>();
+    
 
 
     public string[] queries = new string[] {"id", "mpg", "cylinders", "displacement", "horsepower", "weight", "acceleration", "model_year", "origin", "brand", "model", "type" };
@@ -86,8 +92,8 @@ public class Preprocessing
     public readonly string filepathMetadb = "../../../metadb.db";
     public readonly string filepathQueries = "../../../queries.txt";
 
-    private readonly bool RedoDB = false;
-    private readonly bool RedoMDB = false;
+    private readonly bool RedoDB = true;
+    private readonly bool RedoMDB = true;
     public int N_totaldocuments = 0;
     public int N_totalqueries = 0;
     public int uniqueQueries = 0;
@@ -139,21 +145,24 @@ public class Preprocessing
                 }
             }
 
+
+
+            ProcesQueries(GetQueries());
             CalculateIDF();
         }
 
         if (RedoMDB)
         {
 
-        Console.WriteLine("Metadb Database will now be emptied");
+            Console.WriteLine("Metadb Database will now be emptied");
 
-        PrintDatabase(metadb);
-        DropDatabase(metadb);
+             PrintDatabase(metadb);
+             DropDatabase(metadb);
 
 
-        //fill metadb
-        Console.WriteLine("Filling metadb");
-        DictionaryToDatabase(Database, metadb);
+            //fill metadb
+            Console.WriteLine("Filling metadb");
+            DictionaryToDatabase(Database, metadb);
         }
 
         PrintDatabase(metadb);
@@ -182,9 +191,7 @@ public class Preprocessing
             connection.Open();
 
             // Get the queries and data
-            //string[] queries = ProcesQueries(GetQueries());
-            string[] data = GetDataset();
-            string[] commands = data;//queries.Concat(data).ToArray();
+            string[] commands = GetDataset();
 
 
             // Execute commands
@@ -219,9 +226,9 @@ public class Preprocessing
         return script.Split('\n');
     }
 
-    public string[] ProcesQueries(string[] queries)
+    public void ProcesQueries(string[] queries)
     {
-        string[] result = new string[queries.Length - 2];
+        string[] result = new string[queries.Length];
 
 
         N_totalqueries = int.Parse(queries[0].Split(" ")[0]);
@@ -229,17 +236,101 @@ public class Preprocessing
         //optional denk ik
         uniqueQueries = int.Parse(queries[1].Split(" ")[0]);
 
-        for (int i = 2; i < queries.Length; i++)
+
+        List<List<((string, string), int)>> mapped = new List<List<((string, string), int)>>();
+        for (int i = 2; i < queries.Length - 1; i++)
         {
-            result[i] = ProcesQuery(queries[i]);
+            mapped.Add(MapQuery(queries[i]));
         }
 
-        return result;
+        foreach (List<((string, string), int)> map in mapped)
+        {
+            foreach (((string, string), int) keyValue in map)
+            {
+                if (Database.ContainsKey(keyValue.Item1))
+                {
+                    Database[keyValue.Item1].RQF += keyValue.Item2;
+                }
+                else
+                {
+                    //throw(new NotImplementedException());
+                    Database[keyValue.Item1] = new MetaData();
+                    Database[keyValue.Item1].RQF += keyValue.Item2;
+                }
+            }
+        }
+
     }
 
-    public string ProcesQuery(string query)
+    
+
+    public List<((string, string), int)> MapQuery(string query)
     {
-        throw (new NotImplementedException());
+        //124 times: SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'
+        string[] parts = query.Split(" ");
+        int aantal = int.Parse(parts[0]);
+
+        int i = 3;
+
+        // Process the select part
+        /*
+        while (parts[i] != "FROM" && i < parts.Length)
+        {
+            attributen[i-3] = NoPoint(parts[i]);
+            i++;
+        }
+
+        if (attributen[0] == "*")
+        {
+            attributen = queries;
+        }
+        */
+
+        while (parts[i] != "WHERE" && i < parts.Length) i++;
+        
+        List<((string, string), int)> map = new List<((string, string), int)>();
+        
+
+        // Process the where part
+        while (i < parts.Length - 1)
+        {
+            //attribute
+            string attribute = NoPoint(parts[i]).Trim();
+            
+
+            //IN or =
+            if (parts[i+1] == "IN")
+            {
+                //set catagorial values
+                string[] values = parts[i + 2].Split(",");
+
+                foreach (string valuez in values)
+                {
+                   string value = NoPoint(valuez.Replace("\r", "").Replace("\n", "").Replace("'", "").Trim());
+                    map.Add(((attribute, value), aantal));
+                    i++;
+                }
+                
+                i++;
+            }
+            else if (parts[i + 1] == "=")
+            {
+                //catagorial value
+                string value = NoPoint(parts[i + 2].Replace("\r", "").Replace("\n", "").Replace("'", "").Trim());
+                map.Add(((attribute, value), aantal));
+                i++;
+            }
+
+            //set catagorial values or catagorial value
+
+            i += 3;
+        }
+
+
+
+        return map;
+
+        //throw (new NotImplementedException());
     }
 
     public string[] GetDataset()
@@ -356,53 +447,60 @@ public class Preprocessing
 
     public void DictionaryToDatabase(Dictionary<(string, string), MetaData> chosenDictionary, string databasePath)
     {
-       HashSet<string> tables = new HashSet<string>();
+        HashSet<string> tables = new HashSet<string>();
         using (var connection = new SqliteConnection(databasePath))
         {
             connection.Open();
 
             using (var command = connection.CreateCommand())
             {
-                /*
-                foreach (KeyValuePair<string, List<string>> entry in tableDictionary)
-                {
-                    string key = entry.Key;
-                    List<string> value = entry.Value;
-
-                    command.CommandText = $"CREATE TABLE {key} (id integer NOT NULL, {key} text, PRIMARY KEY (id));";
-                    command.ExecuteNonQuery();
-                }
-                */
-
                 foreach (KeyValuePair<(string, string), MetaData> entry in chosenDictionary)
                 {
-                    
                     string attribuut = entry.Key.Item1;
-                    string invulling = entry.Key.Item2; //NoPoint(entry.Key.Item2);
+                    string typeInvulling = ReturnType(attribuut);
+                    string invulling = entry.Key.Item2;
                     string posting = ListToString(entry.Value.PostingList);
                     double IDF = entry.Value.IDF;
-                    string typeInvulling = ReturnType(attribuut);
+                    int RQF = entry.Value.RQF;
 
-                    //create a table for each different type
+                    // Create a table for each different type if it doesn't exist
                     if (!tables.Contains(attribuut))
                     {
-                        command.CommandText = $"CREATE TABLE {attribuut} " +
-                                              $"({attribuut} {typeInvulling}, " +
-                                              $"Posting text, " +
-                                              $"IDF real, " +
-                                              $"PRIMARY KEY({attribuut})" + 
+                        command.CommandText = $"CREATE TABLE IF NOT EXISTS {attribuut} (" +
+                                              $"{attribuut} {typeInvulling}," +
+                                              $"Posting TEXT," +
+                                              $"IDF REAL," +
+                                              $"RQF INTEGER," +
+                                              $"PRIMARY KEY({attribuut})" +
                                               $");";
-
                         command.ExecuteNonQuery();
                         tables.Add(attribuut);
                     }
 
-                    command.CommandText = $"INSERT INTO {attribuut} ({attribuut}, Posting, IDF) VALUES ('{invulling}', '{posting}', '{IDF}')";
-                    command.ExecuteNonQuery();
+                    if (Contains(invulling, '\''))
+                    {
+                        bool test = true;
+
+                    }
+
+                    // For integer values, no single quotes are needed
+                    command.CommandText = $"INSERT INTO {attribuut} ({attribuut}, Posting, IDF, RQF) VALUES ('{invulling}', '{posting}', '{IDF}', '{RQF}')";
+
+
+                    try
+                    {
+                        command.ExecuteNonQuery();
+                    }
+                    catch (SqliteException ex)
+                    {
+                        //throw new Exception($"Error inserting data into table {attribuut}: {ex.Message}");
+                        Console.WriteLine($"Error inserting data into table {attribuut}: {ex.Message}");
+                    }
                 }
             }
         }
     }
+
 
 
     public static string NoPoint(string attribuut)
@@ -441,7 +539,7 @@ public class Preprocessing
         {
             case "integer": return int.Parse(value);
             case "real": return float.Parse(value);
-            default: return value;
+            default: return value; //rest becomes text
         }
     }
 
@@ -470,8 +568,10 @@ public class Preprocessing
         //de get strings van de reader zijn de invullingen van de attributen van een auto. bv type = cilinder, en de invulling = 4
         for (int i = 1; i < queries.Length; i++)
         {
+            string attribute = NoPoint(queries[i]).Trim(); 
+            string value = NoPoint(reader.GetString(i).Replace("\r", "").Replace("\n", "").Replace("'", "").Trim());
             //queries zijn de types die we hebben (oftewel de attributen van een auto)
-            keyValues.Add(((queries[i], reader.GetString(i)), id));
+            keyValues.Add(((attribute, value), id));
         }
         /*
            //niet boeinnd dit was gewoon ff om te kijken
@@ -504,6 +604,8 @@ public class Preprocessing
                 Database[keyValue.Item1].PostingList.Add(keyValue.Item2);
                 Database[keyValue.Item1].DocumentFrequency++;
 
+                
+
             }
             else
             {
@@ -524,8 +626,16 @@ public class Preprocessing
     {
         foreach (KeyValuePair<(string,string), MetaData> data in Database)
         {
-            data.Value.IDF = Math.Log(N_totaldocuments / data.Value.DocumentFrequency);
+            if(data.Value.DocumentFrequency != 0)
+                data.Value.IDF = Math.Log(N_totaldocuments / data.Value.DocumentFrequency);
+            else data.Value.IDF = 0;
+
         }
+    }
+
+    Boolean Contains(string s, char c)
+    {
+        return s.Contains(c);
     }
 
 
