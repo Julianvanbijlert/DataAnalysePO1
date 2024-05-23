@@ -139,13 +139,13 @@ using System.Collections.Generic;
 
     public void GetAllFromMetaDB()
     {
-        using (var connection = new SqliteConnection(preproces.database))
+        using (var connection = new SqliteConnection(preproces.metadb))
         {
             connection.Open();
 
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = "SELECT * FROM autompg";
+                command.CommandText = "SELECT * FROM ";
                 using (var reader = command.ExecuteReader())
                 {
                     while (reader.Read())

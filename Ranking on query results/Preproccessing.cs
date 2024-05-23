@@ -36,6 +36,10 @@ public class MetaData
     /// </summary>
     public double IDF;
 
+
+    //Emma weet dit
+    public double h;
+
     public int RQF;
     public MetaData()
     {
@@ -693,10 +697,21 @@ public class Preprocessing
 
     public void CalculateIDF()
     {
+        // attribuut, waarde van attribuut, metadata
         foreach (KeyValuePair<(string,string), MetaData> data in Database)
         {
-            if(data.Value.DocumentFrequency != 0)
-                data.Value.IDF = Math.Log(N_totaldocuments / data.Value.DocumentFrequency);
+            if (data.Value.DocumentFrequency != 0)
+            {
+                if (ReturnType(data.Key.Item1) == "text")
+                {
+                    data.Value.IDF = Math.Log(N_totaldocuments / data.Value.DocumentFrequency);
+
+                }
+                else
+                {
+
+                }
+            }
             else data.Value.IDF = 0;
 
         }
