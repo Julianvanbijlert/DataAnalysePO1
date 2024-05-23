@@ -697,6 +697,11 @@ public class Preprocessing
 
     public void CalculateIDF()
     {
+        // n is aantal (unieke??) numerieke tuples nog doen!!
+        int n = 10;
+        // deze moet je berekenen voor elke kolom ( dus een rij erbij?) 
+        int h = 10; 
+
         // attribuut, waarde van attribuut, metadata
         foreach (KeyValuePair<(string,string), MetaData> data in Database)
         {
@@ -709,6 +714,10 @@ public class Preprocessing
                 }
                 else
                 {
+
+                    data.Value.IDF = 0; 
+                    // voor elke waarde j in het attribuut die we zegmaar onderzoeken 
+                    data.Value.IDF += Math.Exp(-0.5 * Math.Pow((j - waarde die we onderzoeken ) / h, 2))
 
                 }
             }
