@@ -27,6 +27,10 @@ public class MetaData
     /// </summary>
     public int DocumentFrequency;
 
+
+
+    public float QF;
+
     /// <summary>
     /// idf is a measure for the rareness of a term
     /// </summary>
@@ -45,6 +49,25 @@ public class MetaData
         PostingList = new List<float>(){i};
         DocumentFrequency = 1;
         RQF = 0;
+    }
+
+    public MetaData(List<float> postingList, int documentFrequency, double idf, int rqf)
+    {
+        PostingList = postingList;
+        DocumentFrequency = documentFrequency;
+        IDF = idf;
+        RQF = rqf;
+        
+    }
+
+    public MetaData(string pl, string idf, string rqf, string qf)
+    {
+        PostingList = QueryProccessing.StringToList(pl);
+        
+
+        IDF = double.Parse(idf);
+        RQF = int.Parse(rqf);
+        QF = float.Parse(qf);
     }
 }
 public class Preprocessing
@@ -77,13 +100,13 @@ public class Preprocessing
     public Dictionary<string, float> RQF = new Dictionary<string, float>();
     public Dictionary<(string, string), MetaData> Database = new Dictionary<(string, string), MetaData>();
     public Dictionary<string, List<string>> tablesforDictionary = new Dictionary<string, List<string>>();
+
     
 
 
-    public string[] queries = new string[] {"id", "mpg", "cylinders", "displacement", "horsepower", "weight", "acceleration", "model_year", "origin", "brand", "model", "type" };
+    public static string[] queries = new string[] {"id", "mpg", "cylinders", "displacement", "horsepower", "weight", "acceleration", "model_year", "origin", "brand", "model", "type" };
 
 
-    public Dictionary<string, string[]> types = new Dictionary<string, string[]>();
     //"C:/Users/julia/OneDrive/Bureaublad/UniUtrecht/Leerjaar 2 2023-2024/P4 Data Analyse en Retrieval/Opdrachten/Ranking on query results/Dataset.db";
     public readonly string database = "Data Source=Dataset.db";
     public readonly string table = "autompg";
@@ -92,13 +115,14 @@ public class Preprocessing
     public readonly string filepathMetadb = "../../../metadb.db";
     public readonly string filepathQueries = "../../../queries.txt";
 
-    private readonly bool RedoDB = true;
-    private readonly bool RedoMDB = true;
+    private readonly bool RedoDB = false;
+    private readonly bool RedoMDB = false;
     public int N_totaldocuments = 0;
     public int N_totalqueries = 0;
     public int uniqueQueries = 0;
 
-    
+    public int[] RQFMax = new int[queries.Length - 1];
+
 
     public void Processing()
     {
@@ -149,6 +173,7 @@ public class Preprocessing
 
             ProcesQueries(GetQueries());
             CalculateIDF();
+            CalculateQF();
         }
 
         if (RedoMDB)
@@ -257,6 +282,11 @@ public class Preprocessing
                     Database[keyValue.Item1] = new MetaData();
                     Database[keyValue.Item1].RQF += keyValue.Item2;
                 }
+
+                if (RQFMax[AttributeToIndex(keyValue.Item1.Item1)] < keyValue.Item2)
+                {
+                    RQFMax[AttributeToIndex(keyValue.Item1.Item1)] = keyValue.Item2;
+                }
             }
         }
 
@@ -264,7 +294,7 @@ public class Preprocessing
 
     
 
-    public List<((string, string), int)> MapQuery(string query)
+    public static List<((string, string), int)> MapQuery(string query)
     {
         //124 times: SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'
         string[] parts = query.Split(" ");
@@ -286,7 +316,9 @@ public class Preprocessing
         }
         */
 
-        while (parts[i] != "WHERE" && i < parts.Length) i++;
+        while (parts[i] != "WHERE" && i < parts.Length - 1) i++;
+
+        i++;
         
         List<((string, string), int)> map = new List<((string, string), int)>();
         
@@ -320,6 +352,7 @@ public class Preprocessing
                 map.Add(((attribute, value), aantal));
                 i++;
             }
+            else throw(new NotImplementedException());
 
             //set catagorial values or catagorial value
 
@@ -331,6 +364,46 @@ public class Preprocessing
         return map;
 
         //throw (new NotImplementedException());
+    }
+
+    public string[] GetPosting(List<((string, string), int)> query)
+    {
+        string[] result = new string[query.Count];
+        for (int i = 0; i < query.Count; i++)
+        {
+            result[i] = GetPostingDatabase(query[i].Item1.Item1);
+            
+        }
+
+        return result;
+    }
+
+    public string GetPostingDatabase(string attribute)
+    {
+        
+        using (var conn = new SqliteConnection(database))
+        {
+            conn.Open();
+            var command = conn.CreateCommand();
+
+
+
+
+            command.CommandText = $"SELECT {attribute}, Posting FROM {attribute}";
+
+           
+
+            //nu processen we de data
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+
+                }
+            }
+        }
+
+        return "";
     }
 
     public string[] GetDataset()
@@ -462,6 +535,7 @@ public class Preprocessing
                     string posting = ListToString(entry.Value.PostingList);
                     double IDF = entry.Value.IDF;
                     int RQF = entry.Value.RQF;
+                    float QF = entry.Value.QF;
 
                     // Create a table for each different type if it doesn't exist
                     if (!tables.Contains(attribuut))
@@ -471,20 +545,15 @@ public class Preprocessing
                                               $"Posting TEXT," +
                                               $"IDF REAL," +
                                               $"RQF INTEGER," +
+                                              $"QF INTEGER," +
                                               $"PRIMARY KEY({attribuut})" +
                                               $");";
                         command.ExecuteNonQuery();
                         tables.Add(attribuut);
                     }
 
-                    if (Contains(invulling, '\''))
-                    {
-                        bool test = true;
-
-                    }
-
                     // For integer values, no single quotes are needed
-                    command.CommandText = $"INSERT INTO {attribuut} ({attribuut}, Posting, IDF, RQF) VALUES ('{invulling}', '{posting}', '{IDF}', '{RQF}')";
+                    command.CommandText = $"INSERT INTO {attribuut} ({attribuut}, Posting, IDF, RQF, QF) VALUES ('{invulling}', '{posting}', '{IDF}', '{RQF}', '{QF}')";
 
 
                     try
@@ -633,11 +702,38 @@ public class Preprocessing
         }
     }
 
+        //(float) (MetaDatabase[q].RQF + 1) / (RGQFmax() + 1);
+    public void CalculateQF()
+    {
+
+        foreach (KeyValuePair<(string, string), MetaData> data in Database)
+        {
+            
+            data.Value.QF = (float) (data.Value.RQF + 1) / (RQFMax[AttributeToIndex(data.Key.Item1)] + 1);
+        }
+    }
+
+
+    
+
     Boolean Contains(string s, char c)
     {
         return s.Contains(c);
     }
 
+
+    public int AttributeToIndex(string s)
+    {
+        for (int i = 0; i < queries.Length; i++)
+        {
+            if (queries[i] == s)
+            {
+                return i - 1;
+            }
+        }
+
+        return -1;
+    }
 
     
 }

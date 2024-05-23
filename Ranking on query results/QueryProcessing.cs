@@ -22,26 +22,199 @@ using System.Collections.Generic;
 
  namespace project;
 
+ public class OutputData
+ {
+     public string Tupel;
+     public float Score;
+
+     public OutputData(string Tupel, float Score)
+     {
+            this.Tupel = Tupel;
+            this.Score = Score;
+        
+     }
+
+
+     public static void ReOrder(OutputData[] Output, float score, string[] tupel)
+     {
+         for (int i = 0; i < Output.Length; i++)
+         {
+             if (score > Output[i].Score)
+             {
+                 for (int j = Output.Length - 1; j > i; j--)
+                 {
+                    Output[j] = Output[j - 1];
+                 }
+                Output[i] = new OutputData(tupel.ToString(), score);
+                break;
+             }
+         }
+     }
+
+ }
  public class QueryProccessing
  {
      private Preprocessing preproces;
+     private int k = 10;
 
+     private string VoorbeeldQuery = "SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'";
+
+
+    private Dictionary<string, MetaData> MetaDatabase;
 
     public QueryProccessing()
     {
+        MetaDatabase = new Dictionary<string, MetaData>();
         this.preproces = new Preprocessing();
-        preproces.Processing();
+        //preproces.Processing();
+        GetAllFromMetaDB();
+
+
+        Console.WriteLine("You can query now:");
+
+        Query(VoorbeeldQuery, k);
+        //Query(Console.ReadLine(), k);
 
     }
 
-
-
-    public float RGQFmax()
+    public void Query(string query, int k)
     {
-        throw (new NotImplementedException());
+        //Save query for later preprocsessing
+        Save(query);
+
+        OutputData[] Output = new OutputData[k];
+
+        //split Query in terms
+        var Qterms =  Preprocessing.MapQuery(query);
+
+        string[] QueryTerms = new string[Qterms.Count];
+        for (int i = 0; i < Qterms.Count; i++)
+        {
+            QueryTerms[i] = Qterms[i].Item1.Item2;
+        }
+
+        List<float>[] PostingLists = new List<float>[Qterms.Count];
+        //Get postinglists of all attributes of queries
+        for (int i = 0; i < Qterms.Count; i++)
+        {
+            PostingLists[i] = MetaDatabase[Qterms[i].Item1.Item2].PostingList;
+        }
+
+        //Order tuples on attribute similarity
+
+
+        //Get tuples of that postinglists
+        List<string[]> TupelLists = GetDatabaseTupels();
+
+        //calculate similarity between query and tuples
+        foreach (var tupel in TupelLists)
+        {
+           float scoret = Sim(tupel, QueryTerms);
+
+           //Reorder top k
+           if(scoret < Output[k].Score)
+               OutputData.ReOrder(Output, scoret, tupel);
+        }
+
+
+        //Output top k
+        foreach (var output in Output)
+        {
+            Console.WriteLine(output.Tupel);
+        }
+
+        //Thresholdagorithm
+
+
+        /*
+            "SELECT TOP K R.*" +
+            "FROM R" +
+            "ORDER BY" +
+            "((CASE WHEN R.A1 = q1 THEN 1 ELSE 0 END) +(CASE WHEN R.A2 = q2 THEN 1 ELSE 0 END) +...(CASE WHEN R.Am = qm THEN 1 ELSE 0 END))" +
+            "DESC";
+        */
+
+
     }
 
-    //TODO fill RQF functie
+    public void GetAllFromMetaDB()
+    {
+        using (var connection = new SqliteConnection(preproces.database))
+        {
+            connection.Open();
+
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT * FROM autompg";
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        
+                        string attribute = reader.GetString(0);
+                        string posting = reader.GetString(1);
+                        string idf = reader.GetString(2);
+                        string rqf = reader.GetString(3);
+                        string qf = reader.GetString(4);
+
+                        MetaDatabase.Add(attribute, new MetaData(posting, idf, rqf, qf));
+                    }
+                }
+            }
+        }
+    }
+
+    public void ThresholdAlgorithm()
+    {
+        
+
+    }
+
+
+    //redo
+    public void Save(string query)
+    {
+        using (var connection = new SqliteConnection(preproces.metadb))
+        {
+            connection.Open();
+
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = query;
+                command.ExecuteNonQuery();
+            }
+        }
+    }
+
+    public List<string[]> GetDatabaseTupels()
+    {
+        List<string[]> Tupels = new List<string[]>();
+
+        using (var connection = new SqliteConnection(preproces.database))
+        {
+            connection.Open();
+
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT * FROM autompg";
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        string[] tupel = new string[reader.FieldCount];
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            tupel[i] = reader.GetString(i);
+                        }
+                        Tupels.Add(tupel);
+                    }
+                }
+            }
+        }
+
+        return Tupels;
+    }
+    
 
     //t is een lijst van termen, q is een lijst van query termen
     public float Sim(string[] t, string[] q)
@@ -69,9 +242,9 @@ using System.Collections.Generic;
 
     public float QF(string q)
     {
-        throw (new NotImplementedException("RQF NOT FILLED YET"));
+
         //RQF(V) / RGQFmax
-       // return (float)RQF[q] / RGQFmax();
+        return MetaDatabase[q].QF;
 
     }
 
@@ -80,7 +253,7 @@ using System.Collections.Generic;
     // similarity tussen een query term q en een term t 
     public float S(string t, string q)
     {
-        return J(W(t), W(q)) * QFSimularity(q, t);
+        return J(W(t), W(q)) * QFSimularity(t, q);
     }
 
     //subset van de queries in de workload waarin waarde v voorkomt in een in clause voor een specifiek attribuut
@@ -88,8 +261,8 @@ using System.Collections.Generic;
     {
         //TODO: implementatie van W, database query
         //Dit is gewoon de postinglist van t
-
-     throw (new NotImplementedException("W NOT FILLED YET"));
+        
+       return MetaDatabase[attribute].PostingList;
     }
 
 
@@ -120,7 +293,7 @@ using System.Collections.Generic;
                 {
                     while (reader.Read())
                     {
-                        string list = reader.GetString(0);
+                        string list = reader.GetString(1);
                         Posting = StringToList(list);
 
                     }
@@ -131,7 +304,7 @@ using System.Collections.Generic;
         return Posting;
     }
 
-    public List<float> StringToList(string list)
+    public static List<float> StringToList(string list)
     {
         List<float> result = new List<float>();
         string[] values = list.Split(' ');
@@ -272,6 +445,8 @@ public static class Program
     {
         
         QueryProccessing queryProccessing = new QueryProccessing();
+
+
 
     }
 }
