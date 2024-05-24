@@ -67,7 +67,8 @@ using System.Collections.Generic;
      private Preprocessing preproces;
      private int k = 10;
 
-     private string VoorbeeldQuery = "SELECT * FROM autompg WHERE brand IN ('audi','bmw','mercedes-benz','volkswagen')";//"SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'";
+    // private string VoorbeeldQuery = "SELECT * FROM autompg WHERE brand IN ('audi','bmw','mercedes-benz','volkswagen')";
+    private string VoorbeeldQuery = "SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'";
 
     
     private Dictionary<(string, string), MetaData> MetaDatabase;
@@ -76,15 +77,15 @@ using System.Collections.Generic;
     {
         MetaDatabase = new Dictionary<(string, string), MetaData>();
         this.preproces = new Preprocessing();
-        //preproces.Processing();
+        preproces.Processing();
         GetAllFromMetaDB();
 
 
         Console.WriteLine("You can query now:");
-
+        Console.WriteLine($"Your query is: {VoorbeeldQuery}");
         Query(VoorbeeldQuery, k);
         //Query(Console.ReadLine(), k);
-
+        Console.ReadLine();
     }
 
     public void Query(string query, int k)
@@ -126,6 +127,10 @@ using System.Collections.Generic;
         }
 
 
+                
+        
+            
+            
         //Output top k
         foreach (var output in Output)
         {

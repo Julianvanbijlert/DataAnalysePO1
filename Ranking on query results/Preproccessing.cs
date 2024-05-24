@@ -119,8 +119,8 @@ public class Preprocessing
     public readonly string filepathMetadb = "../../../metadb.db";
     public readonly string filepathQueries = "../../../queries.txt";
 
-    private readonly bool RedoDB = false;
-    private readonly bool RedoMDB = false;
+    private readonly bool RedoDB = true;
+    private readonly bool RedoMDB = true;
     public int N_totaldocuments = 0;
     public int N_totalqueries = 0;
     public int uniqueQueries = 0;
@@ -195,7 +195,7 @@ public class Preprocessing
         }
 
         PrintDatabase(metadb);
-        Console.ReadLine();
+        //Console.ReadLine();
     }
 
     public void ReFillDatabase(string databasePath)
