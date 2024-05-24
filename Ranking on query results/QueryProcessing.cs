@@ -70,6 +70,8 @@ using System.Collections.Generic;
     // private string VoorbeeldQuery = "SELECT * FROM autompg WHERE brand IN ('audi','bmw','mercedes-benz','volkswagen')";
     private string VoorbeeldQuery = "SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'";
 
+
+
     
     private Dictionary<(string, string), MetaData> MetaDatabase;
 
@@ -279,10 +281,10 @@ using System.Collections.Generic;
     {
         //For zero and many answer queries
         if (table != qtable)
-            return 0;
+            return QF(table, u) * 0.000001f; 
 
         if (u != v)
-            return 0.0001f;
+            return 0;
 
         return QF(table, u);
     }
@@ -290,9 +292,17 @@ using System.Collections.Generic;
 
     public float QF(string table, string q)
     {
-
-        //RQF(V) / RGQFmax
-        return MetaDatabase[(table, q)].QF;
+        float result = 0;
+        //RQF(V) / RGQFmax]
+        try
+        {
+            result = MetaDatabase[(table, q)].QF;
+        }
+        catch (Exception e)
+        {
+            return 0;
+        }
+        return result;
 
     }
 

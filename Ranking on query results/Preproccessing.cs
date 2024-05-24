@@ -720,7 +720,8 @@ public class Preprocessing
 
                     //data.Value.IDF = 0; 
                     // voor elke waarde j in het attribuut die we zegmaar onderzoeken 
-                   // data.Value.IDF += Math.Exp(-0.5 * Math.Pow((j - waarde die we onderzoeken ) / h, 2);
+                   
+                    //data.Value.IDF += Math.Exp(-0.5 * Math.Pow((j - waarde die we onderzoeken ) / h, 2);
 
                 }
             }
