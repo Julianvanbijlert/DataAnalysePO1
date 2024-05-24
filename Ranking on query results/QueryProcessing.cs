@@ -37,6 +37,11 @@ using System.Collections.Generic;
 
      public static void ReOrder(OutputData[] Output, float score, string[] tupel)
      {
+         if (Output[Output.Length - 1] != null && Output[Output.Length - 1].Score > score)
+         {
+             return;
+         }
+
          for (int i = 0; i < Output.Length; i++)
          {
              if (Output[i] == null)
@@ -44,6 +49,7 @@ using System.Collections.Generic;
                  Output[i] = new OutputData(string.Join(",", tupel), score);
                  return;
              }
+
              else if (Output[i].Score < score)
              {
                  OutputData temp = Output[i];
@@ -248,10 +254,14 @@ using System.Collections.Generic;
 
         //sum to m: (S(t,q),
         //start at 1 to skip ID
+
+        //Hier had ook een TA of NRA algoritme kunnen staan, maar we hadden niet genoeg tijd. 
+        
         for (int i = 1; i < m; i++)
         {
             for (int j = 0; j < q.Count; j++)
             {
+                //score of queries
                 string table = Preprocessing.queries[i];
                  sum += S(table, t[i], q[j].Item1);
             }
@@ -260,10 +270,14 @@ using System.Collections.Generic;
         return sum;
     }
 
-    public float QFSimularity(string table, string u, string v)
+    public float QFSimularity(string table, string u, string qtable, string v)
     {
-        if (u != v)
+        //For zero and many answer queries
+        if (table != qtable)
             return 0;
+
+        if (u != v)
+            return 0.0001f;
 
         return QF(table, u);
     }
@@ -282,7 +296,7 @@ using System.Collections.Generic;
     // similarity tussen een query term q en een term t 
     public float S(string table, string t, (string, string) q)
     {
-        return J(W(table, t), W(q.Item1, q.Item2)) * QFSimularity(table, t, q.Item2);
+        return J(W(table, t), W(q.Item1, q.Item2)) * QFSimularity(table, t, q.Item1, q.Item2);
     }
 
     //subset van de queries in de workload waarin waarde v voorkomt in een in clause voor een specifiek attribuut
@@ -420,7 +434,13 @@ using System.Collections.Generic;
     //length set intersection / length set union
     public float J(List<float> t, List<float> q)
     {
-        return FastIntersect(t, q) / FastUnion(t, q);
+        float union = FastUnion(t, q);
+        if (union == 0)
+        {
+            return 0;
+        }
+
+        return FastIntersect(t, q) / union;
     }
     //length set intersection
     public float FastIntersect(List<float> t, List<float> q)
