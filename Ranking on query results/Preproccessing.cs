@@ -302,7 +302,9 @@ public class Preprocessing
     {
         //124 times: SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'
         string[] parts = query.Split(" ");
-        int aantal = int.Parse(parts[0]);
+        int aantal = 1;
+        if (parts[0] != "SELECT")
+            aantal = int.Parse(parts[0]);
 
         int i = 3;
 
@@ -714,10 +716,11 @@ public class Preprocessing
                 }
                 else
                 {
+                    data.Value.IDF = Math.Log(N_totaldocuments / data.Value.DocumentFrequency);
 
-                    data.Value.IDF = 0; 
+                    //data.Value.IDF = 0; 
                     // voor elke waarde j in het attribuut die we zegmaar onderzoeken 
-                    data.Value.IDF += Math.Exp(-0.5 * Math.Pow((j - waarde die we onderzoeken ) / h, 2))
+                   // data.Value.IDF += Math.Exp(-0.5 * Math.Pow((j - waarde die we onderzoeken ) / h, 2);
 
                 }
             }

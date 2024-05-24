@@ -29,9 +29,9 @@ using System.Collections.Generic;
 
      public OutputData(string Tupel, float Score)
      {
-            this.Tupel = Tupel;
-            this.Score = Score;
-        
+         this.Tupel = Tupel;
+         this.Score = Score;
+
      }
 
 
@@ -39,32 +39,36 @@ using System.Collections.Generic;
      {
          for (int i = 0; i < Output.Length; i++)
          {
-             if (score > Output[i].Score)
+             if (Output[i] == null)
              {
-                 for (int j = Output.Length - 1; j > i; j--)
-                 {
-                    Output[j] = Output[j - 1];
-                 }
-                Output[i] = new OutputData(tupel.ToString(), score);
-                break;
+                 Output[i] = new OutputData(string.Join(",", tupel), score);
+                 return;
+             }
+             else if (Output[i].Score < score)
+             {
+                 OutputData temp = Output[i];
+                 Output[i] = new OutputData(string.Join(",", tupel), score);
+                 ReOrder(Output, temp.Score, temp.Tupel.Split(","));
+                 return;
              }
          }
-     }
 
+     }
  }
+
  public class QueryProccessing
  {
      private Preprocessing preproces;
      private int k = 10;
 
-     private string VoorbeeldQuery = "SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'";
+     private string VoorbeeldQuery = "SELECT * FROM autompg WHERE brand IN ('audi','bmw','mercedes-benz','volkswagen')";//"SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'";
 
-
-    private Dictionary<string, MetaData> MetaDatabase;
+    
+    private Dictionary<(string, string), MetaData> MetaDatabase;
 
     public QueryProccessing()
     {
-        MetaDatabase = new Dictionary<string, MetaData>();
+        MetaDatabase = new Dictionary<(string, string), MetaData>();
         this.preproces = new Preprocessing();
         //preproces.Processing();
         GetAllFromMetaDB();
@@ -80,12 +84,12 @@ using System.Collections.Generic;
     public void Query(string query, int k)
     {
         //Save query for later preprocsessing
-        Save(query);
+        //Save(query);
 
         OutputData[] Output = new OutputData[k];
 
         //split Query in terms
-        var Qterms =  Preprocessing.MapQuery(query);
+        var Qterms = Preprocessing.MapQuery(query);
 
         string[] QueryTerms = new string[Qterms.Count];
         for (int i = 0; i < Qterms.Count; i++)
@@ -97,7 +101,7 @@ using System.Collections.Generic;
         //Get postinglists of all attributes of queries
         for (int i = 0; i < Qterms.Count; i++)
         {
-            PostingLists[i] = MetaDatabase[Qterms[i].Item1.Item2].PostingList;
+            PostingLists[i] = MetaDatabase[Qterms[i].Item1].PostingList;
         }
 
         //Order tuples on attribute similarity
@@ -109,32 +113,38 @@ using System.Collections.Generic;
         //calculate similarity between query and tuples
         foreach (var tupel in TupelLists)
         {
-           float scoret = Sim(tupel, QueryTerms);
+            float scoret = Sim(tupel, Qterms);
 
-           //Reorder top k
-           if(scoret < Output[k].Score)
-               OutputData.ReOrder(Output, scoret, tupel);
+            //Reorder top k
+            OutputData.ReOrder(Output, scoret, tupel);
         }
 
 
         //Output top k
         foreach (var output in Output)
         {
-            Console.WriteLine(output.Tupel);
+            if (output != null)
+            {
+                Console.WriteLine(output.Tupel);
+
+
+
+            }
+            else Console.WriteLine("No more results");
+
+            //Thresholdagorithm
+
+
+            /*
+                "SELECT TOP K R.*" +
+                "FROM R" +
+                "ORDER BY" +
+                "((CASE WHEN R.A1 = q1 THEN 1 ELSE 0 END) +(CASE WHEN R.A2 = q2 THEN 1 ELSE 0 END) +...(CASE WHEN R.Am = qm THEN 1 ELSE 0 END))" +
+                "DESC";
+            */
+
+
         }
-
-        //Thresholdagorithm
-
-
-        /*
-            "SELECT TOP K R.*" +
-            "FROM R" +
-            "ORDER BY" +
-            "((CASE WHEN R.A1 = q1 THEN 1 ELSE 0 END) +(CASE WHEN R.A2 = q2 THEN 1 ELSE 0 END) +...(CASE WHEN R.Am = qm THEN 1 ELSE 0 END))" +
-            "DESC";
-        */
-
-
     }
 
     public void GetAllFromMetaDB()
@@ -145,24 +155,38 @@ using System.Collections.Generic;
 
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = "SELECT * FROM ";
-                using (var reader = command.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        
-                        string attribute = reader.GetString(0);
-                        string posting = reader.GetString(1);
-                        string idf = reader.GetString(2);
-                        string rqf = reader.GetString(3);
-                        string qf = reader.GetString(4);
 
-                        MetaDatabase.Add(attribute, new MetaData(posting, idf, rqf, qf));
+                command.CommandText = "SELECT name FROM sqlite_master WHERE type='table';";
+                using (var readers = command.ExecuteReader())
+                {
+                    while (readers.Read())
+                    {
+                        string table = readers.GetString(0);
+
+                        using (var tableCommand = connection.CreateCommand())
+                        {
+                            tableCommand.CommandText = $"SELECT * FROM {table};";
+                            using (var reader = tableCommand.ExecuteReader())
+                            {
+                                while (reader.Read())
+                                {
+
+                                    string attribute = reader.GetString(0);
+                                    string posting = reader.GetString(1);
+                                    string idf = reader.GetString(2);
+                                    string rqf = reader.GetString(3);
+                                    string qf = reader.GetString(4);
+
+                                    MetaDatabase.Add((table, attribute), new MetaData(posting, idf, rqf, qf));
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
 
     public void ThresholdAlgorithm()
     {
@@ -217,52 +241,64 @@ using System.Collections.Generic;
     
 
     //t is een lijst van termen, q is een lijst van query termen
-    public float Sim(string[] t, string[] q)
+    public float Sim(string[] t, List<((string,string), int)> q)
     {
         float sum = 0;
-        int m = q.Length;
+        int m = t.Length;
 
         //sum to m: (S(t,q),
-        for (int i = 0; i < m; i++)
+        //start at 1 to skip ID
+        for (int i = 1; i < m; i++)
         {
-            sum += S(t[i], q[i]);
+            for (int j = 0; j < q.Count; j++)
+            {
+                string table = Preprocessing.queries[i];
+                 sum += S(table, t[i], q[j].Item1);
+            }
         }
 
         return sum;
     }
 
-    public float QFSimularity(string u, string v)
+    public float QFSimularity(string table, string u, string v)
     {
         if (u != v)
             return 0;
 
-        return QF(u);
+        return QF(table, u);
     }
 
 
-    public float QF(string q)
+    public float QF(string table, string q)
     {
 
         //RQF(V) / RGQFmax
-        return MetaDatabase[q].QF;
+        return MetaDatabase[(table, q)].QF;
 
     }
 
 
     //S(ti,qj) = J(W(t),W(q) * QF(q)), 
     // similarity tussen een query term q en een term t 
-    public float S(string t, string q)
+    public float S(string table, string t, (string, string) q)
     {
-        return J(W(t), W(q)) * QFSimularity(t, q);
+        return J(W(table, t), W(q.Item1, q.Item2)) * QFSimularity(table, t, q.Item2);
     }
 
     //subset van de queries in de workload waarin waarde v voorkomt in een in clause voor een specifiek attribuut
-    public List<float> W(string attribute)
+    public List<float> W(string table, string attribute)
     {
-        //TODO: implementatie van W, database query
         //Dit is gewoon de postinglist van t
-        
-       return MetaDatabase[attribute].PostingList;
+        try
+        {
+
+            return MetaDatabase[(table, attribute)].PostingList;
+        }
+        catch
+        {
+         //   Console.WriteLine($"Attribute not found {table}, {attribute}");
+            return new List<float>();
+        }
     }
 
 
@@ -307,11 +343,12 @@ using System.Collections.Generic;
     public static List<float> StringToList(string list)
     {
         List<float> result = new List<float>();
-        string[] values = list.Split(' ');
+        string[] values = list.Trim().Split(' ');
 
         foreach (string value in values)
         {
-            result.Add(float.Parse(value));
+            if(value != "")
+                result.Add(float.Parse(value));
         }
 
         return result;
