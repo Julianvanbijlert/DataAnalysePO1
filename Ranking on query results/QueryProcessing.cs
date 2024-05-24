@@ -65,7 +65,7 @@ using System.Collections.Generic;
  public class QueryProccessing
  {
      private Preprocessing preproces;
-     private int k = 10;
+     private int k = 100;
 
     // private string VoorbeeldQuery = "SELECT * FROM autompg WHERE brand IN ('audi','bmw','mercedes-benz','volkswagen')";
     private string VoorbeeldQuery = "SELECT * FROM autompg WHERE model_year = '82' AND type = 'sedan'";
@@ -85,15 +85,15 @@ using System.Collections.Generic;
 
         Console.WriteLine("You can query now:");
         Console.WriteLine($"Your query is: {VoorbeeldQuery}");
-        Query(VoorbeeldQuery, k);
-        //Query(Console.ReadLine(), k);
+       // Query(VoorbeeldQuery, k);
+        Query(Console.ReadLine(), k);
         Console.ReadLine();
     }
 
     public void Query(string query, int k)
     {
         //Save query for later preprocsessing
-        //Save(query);
+        Save(query);
 
         OutputData[] Output = new OutputData[k];
 
@@ -110,7 +110,15 @@ using System.Collections.Generic;
         //Get postinglists of all attributes of queries
         for (int i = 0; i < Qterms.Count; i++)
         {
-            PostingLists[i] = MetaDatabase[Qterms[i].Item1].PostingList;
+            try
+            {
+                PostingLists[i] = MetaDatabase[Qterms[i].Item1].PostingList;
+
+            }
+            catch(Exception e)
+            {
+                PostingLists[i] = new List<float>();
+            }
         }
 
         //Order tuples on attribute similarity
@@ -139,8 +147,6 @@ using System.Collections.Generic;
             if (output != null)
             {
                 Console.WriteLine(output.Tupel);
-
-
 
             }
             else Console.WriteLine("No more results");
@@ -184,13 +190,19 @@ using System.Collections.Generic;
                                 while (reader.Read())
                                 {
 
-                                    string attribute = reader.GetString(0);
+                                    string attribute = Preprocessing.NoComma(reader.GetString(0));
                                     string posting = reader.GetString(1);
                                     string idf = reader.GetString(2);
                                     string rqf = reader.GetString(3);
                                     string qf = reader.GetString(4);
 
-                                    MetaDatabase.Add((table, attribute), new MetaData(posting, idf, rqf, qf));
+                                    try
+                                    {
+                                         MetaDatabase.Add((table, attribute), new MetaData(posting, idf, rqf, qf));
+
+                                    }
+                                    catch (Exception e)
+                                    {                     }
                                 }
                             }
                         }
@@ -211,16 +223,7 @@ using System.Collections.Generic;
     //redo
     public void Save(string query)
     {
-        using (var connection = new SqliteConnection(preproces.metadb))
-        {
-            connection.Open();
-
-            using (var command = connection.CreateCommand())
-            {
-                command.CommandText = query;
-                command.ExecuteNonQuery();
-            }
-        }
+       //TODO
     }
 
     public List<string[]> GetDatabaseTupels()
@@ -281,7 +284,7 @@ using System.Collections.Generic;
     {
         //For zero and many answer queries
         if (table != qtable)
-            return QF(table, u) * 0.000001f; 
+            return QF(table, u) * 0.0001f; 
 
         if (u != v)
             return 0;
@@ -311,7 +314,19 @@ using System.Collections.Generic;
     // similarity tussen een query term q en een term t 
     public float S(string table, string t, (string, string) q)
     {
-        return J(W(table, t), W(q.Item1, q.Item2)) * QFSimularity(table, t, q.Item1, q.Item2);
+        float h = 2;
+        string s = Preprocessing.ReturnType(t);
+
+        if(s == "text")
+        {
+             return (float)(MetaDatabase[(table, t)].IDF) * QFSimularity(table, t, q.Item1, q.Item2) * J(W(table, t), W(q.Item1, q.Item2));
+        }
+
+        float t1 = float.Parse(t);
+        float q1 = float.Parse(q.Item2);
+                     
+        return (float)Math.Exp(-0.5 * Math.Pow((t1 - q1) / h, 2) * (float)(MetaDatabase[(table, t)].IDF)) * QFSimularity(table, t, q.Item1, q.Item2) * J(W(table, t), W(q.Item1, q.Item2));
+
     }
 
     //subset van de queries in de workload waarin waarde v voorkomt in een in clause voor een specifiek attribuut
@@ -320,18 +335,15 @@ using System.Collections.Generic;
         //Dit is gewoon de postinglist van t
         try
         {
-
             return MetaDatabase[(table, attribute)].PostingList;
         }
         catch
         {
-         //   Console.WriteLine($"Attribute not found {table}, {attribute}");
-            return new List<float>();
+           return new List<float>();
         }
     }
 
 
-    //VERY FOUT
     public List<float> Query(string attribute, List<string> SearchTerms)
     {
         List<float> Posting = null;

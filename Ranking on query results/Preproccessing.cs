@@ -584,6 +584,13 @@ public class Preprocessing
         return noPoint;
     }
 
+    public static string NoComma(string attribuut)
+    {
+        string noPoint = attribuut.Replace(",", ".");
+        return noPoint;
+    }
+
+
     public static string ReturnType(string attribuut)
     {
         string typeInvulling;
@@ -717,11 +724,18 @@ public class Preprocessing
                 else
                 {
                     data.Value.IDF = Math.Log(N_totaldocuments / data.Value.DocumentFrequency);
-
                     //data.Value.IDF = 0; 
-                    // voor elke waarde j in het attribuut die we zegmaar onderzoeken 
-                   
-                    //data.Value.IDF += Math.Exp(-0.5 * Math.Pow((j - waarde die we onderzoeken ) / h, 2);
+                    /*
+                     foreach(float i in column)
+                    {
+                    
+                        // voor elke waarde i in het attribuut die we zegmaar onderzoeken 
+                        data.Value.IDF += Math.Exp(-0.5 * Math.Pow((i - data.Value) / h, 2);
+                        
+                    }
+                     
+                     */
+
 
                 }
             }
